@@ -2,7 +2,7 @@
 /**
  * Piwik - free/libre analytics platform
  *
- * @link http://piwik.org
+ * @link https://matomo.org
  * @license http://www.gnu.org/licenses/gpl-3.0.html GPL v3 or later
  */
 
@@ -48,6 +48,17 @@ class DateTest extends \PHPUnit_Framework_TestCase
         $this->assertEquals($date->getDatetime(), $date->getDateStartUTC());
         $date = $date->setTime('12:00:00');
         $this->assertEquals(date('Y-m-d') . ' 12:00:00', $date->getDatetime());
+    }
+
+    /**
+     * create tomorrow object check that timestamp is correct (midnight)
+     *
+     * @group Core
+     */
+    public function testTomorrow()
+    {
+        $date = Date::tomorrow();
+        $this->assertEquals(strtotime(date("Y-m-d ", strtotime('+1day')) . " 00:00:00"), $date->getTimestamp());
     }
 
     /**

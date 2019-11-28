@@ -2,7 +2,7 @@
 /**
  * Piwik - free/libre analytics platform
  *
- * @link http://piwik.org
+ * @link https://matomo.org
  * @license http://www.gnu.org/licenses/gpl-3.0.html GPL v3 or later
  *
  */
@@ -222,6 +222,13 @@ class CronArchive
      */
     public $disableSegmentsArchiving = false;
 
+    /**
+     * If enabled, segments will be only archived for yesterday, but not today. If the segment was created recently,
+     * then it will still be archived for today and the setting will be ignored for this segment.
+     * @var bool
+     */
+    public $skipSegmentsToday = false;
+
     private $websitesWithVisitsSinceLastRun = 0;
     private $skippedPeriodsArchivesWebsite = 0;
     private $skippedPeriodsNoDataInPeriod = 0;
@@ -288,6 +295,7 @@ class CronArchive
         $this->formatter = new Formatter();
 
         $processNewSegmentsFrom = $processNewSegmentsFrom ?: StaticContainer::get('ini.General.process_new_segments_from');
+
         $this->segmentArchivingRequestUrlProvider = new SegmentArchivingRequestUrlProvider($processNewSegmentsFrom);
 
         $this->invalidator = StaticContainer::get('Piwik\Archive\ArchiveInvalidator');
@@ -357,6 +365,10 @@ class CronArchive
 
         if ($this->websites->getInitialSiteIds() != $websitesIds) {
             $this->logger->info('Will ignore websites and help finish a previous started queue instead. IDs: ' . implode(', ', $this->websites->getInitialSiteIds()));
+        }
+
+        if ($this->skipSegmentsToday) {
+            $this->logger->info('Will skip segments archiving for today unless they were created recently');
         }
 
         $this->logForcedSegmentInfo();
@@ -459,17 +471,22 @@ class CronArchive
                 // to process the archives for this website (only if there were visits since midnight)
                 if (!$hasWebsiteDayFinishedSinceLastRun && !$isOldReportInvalidatedForWebsite) {
 
-                    if ($this->isWebsiteUsingTheTracker($idSite)) {
+                    try {
+                        if ($this->isWebsiteUsingTheTracker($idSite)) {
 
-                        if(!$this->hadWebsiteTrafficSinceMidnightInTimezone($idSite)) {
-                            $this->logger->info("Skipped website id $idSite as archiving is not needed");
+                            if(!$this->hadWebsiteTrafficSinceMidnightInTimezone($idSite)) {
+                                $this->logger->info("Skipped website id $idSite as archiving is not needed");
 
-                            $this->skippedDayNoRecentData++;
-                            $this->skipped++;
-                            continue;
+                                $this->skippedDayNoRecentData++;
+                                $this->skipped++;
+                                continue;
+                            }
+                        } else {
+                           $this->logger->info("- website id $idSite is not using the tracker");
                         }
-                    } else {
-                       $this->logger->info("- website id $idSite is not using the tracker");
+                    } catch (UnexpectedWebsiteFoundException $e) {
+                        $this->logger->info("Skipped website id $idSite, got: UnexpectedWebsiteFoundException");
+                        continue;
                     }
 
                 } elseif ($hasWebsiteDayFinishedSinceLastRun) {
@@ -716,7 +733,13 @@ class CronArchive
         /**
          * Trigger archiving for non-day periods
          */
-        $success = $this->processArchiveForPeriods($idSite, $lastTimestampWebsiteProcessedPeriods);
+        try {
+            $success = $this->processArchiveForPeriods($idSite, $lastTimestampWebsiteProcessedPeriods);
+        } catch (UnexpectedWebsiteFoundException $e) {
+            // this website was deleted in the meantime
+            $this->logger->info("Skipped website id $idSite, got: UnexpectedWebsiteFoundException, " . $timerWebsite->__toString());
+            return false;
+        }
 
         // Record successful run of this website's periods archiving
         if ($success) {
@@ -1368,6 +1391,11 @@ class CronArchive
             $this->logger->info("- If you execute this script at least once per hour (or more often) in a crontab, you may disable 'Browser trigger archiving' in Matomo UI > Settings > General Settings.");
             $this->logger->info("  See the doc at: https://matomo.org/docs/setup-auto-archiving/");
         }
+
+        $cliMulti = new CliMulti();
+        $supportsAsync = $cliMulti->supportsAsync();
+        $this->logger->info("- " . ($supportsAsync ? 'Async process archiving supported, using CliMulti.' : 'Async process archiving not supported, using curl requests.'));
+
         $this->logger->info("- Reports for today will be processed at most every " . $this->todayArchiveTimeToLive
             . " seconds. You can change this value in Matomo UI > Settings > General Settings.");
 
@@ -1674,9 +1702,17 @@ class CronArchive
         if (is_null($cache)) {
             $cache = $this->loadCustomDateRangeToPreProcess();
         }
+
         if (empty($cache[$idSite])) {
-            return array();
+            $cache[$idSite] = array();
         }
+
+        $customRanges = array_filter(Config::getInstance()->General['archiving_custom_ranges']);
+
+        if (!empty($customRanges)) {
+            $cache[$idSite] = array_merge($cache[$idSite], $customRanges);
+        }
+
         $dates = array_unique($cache[$idSite]);
         return $dates;
     }
@@ -1749,6 +1785,22 @@ class CronArchive
         return $url;
     }
 
+    protected function wasSegmentChangedRecently($definition, $allSegments)
+    {
+        foreach ($allSegments as $segment) {
+            if ($segment['definition'] === $definition) {
+                $twentyFourHoursAgo = Date::now()->subHour(24);
+                $segmentDate = $segment['ts_created'];
+                if (!empty($segment['ts_last_edit'])) {
+                    $segmentDate = $segment['ts_last_edit'];
+                }
+                return Date::factory($segmentDate)->isLater($twentyFourHoursAgo);
+            }
+        }
+
+        return false;
+    }
+
     /**
      * @param $idSite
      * @param $period
@@ -1774,11 +1826,28 @@ class CronArchive
         $segmentCount = count($segments);
         $processedSegmentCount = 0;
 
+        $allSegmentsFullInfo = array();
+        if ($this->skipSegmentsToday) {
+            // small performance tweak... only needed when skip segments today
+            $segmentEditorModel = StaticContainer::get('Piwik\Plugins\SegmentEditor\Model');
+            $allSegmentsFullInfo = $segmentEditorModel->getSegmentsToAutoArchive($idSite);
+        }
+
         foreach ($segments as $segment) {
+            $shouldSkipToday = $this->skipSegmentsToday && !$this->wasSegmentChangedRecently($segment, $allSegmentsFullInfo);
+
+            if ($this->skipSegmentsToday && !$shouldSkipToday) {
+                $this->logger->info(sprintf('Segment "%s" was created or changed recently and will therefore archive today', $segment));
+            }
+
             $dateParamForSegment = $this->segmentArchivingRequestUrlProvider->getUrlParameterDateString($idSite, $period, $date, $segment);
 
             $urlWithSegment = $this->getVisitsRequestUrl($idSite, $period, $dateParamForSegment, $segment);
             $urlWithSegment = $this->makeRequestUrl($urlWithSegment);
+
+            if ($shouldSkipToday) {
+                $urlWithSegment .= '&skipArchiveSegmentToday=1';
+            }
 
             if ($this->isAlreadyArchivingSegment($urlWithSegment, $idSite, $period, $segment)) {
                 continue;

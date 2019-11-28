@@ -2,7 +2,7 @@
 /**
  * Piwik - free/libre analytics platform
  *
- * @link http://piwik.org
+ * @link https://matomo.org
  * @license http://www.gnu.org/licenses/gpl-3.0.html GPL v3 or later
  *
  */
@@ -20,6 +20,7 @@ use Piwik\Plugins\CoreAdminHome\Tasks\ArchivesToPurgeDistributedList;
 use Piwik\Plugins\PrivacyManager\PrivacyManager;
 use Piwik\Period;
 use Piwik\Segment;
+use Piwik\Site;
 
 /**
  * Service that can be used to invalidate archives or add archive references to a list so they will
@@ -157,6 +158,21 @@ class ArchiveInvalidator
     {
         $invalidationInfo = new InvalidationResult();
 
+        // quick fix for #15086, if we're only invalidating today's date for a site, don't add the site to the list of sites
+        // to reprocess.
+        $hasMoreThanJustToday = [];
+        foreach ($idSites as $idSite) {
+            $hasMoreThanJustToday[$idSite] = true;
+            $tz = Site::getTimezoneFor($idSite);
+
+            if (($period == 'day' || $period === false)
+                && count($dates) == 1
+                && $dates[0]->toString() == Date::factoryInTimezone('today', $tz)
+            ) {
+                $hasMoreThanJustToday[$idSite] = false;
+            }
+        }
+
         /**
          * Triggered when a Matomo user requested the invalidation of some reporting archives. Using this event, plugin
          * developers can automatically invalidate another site, when a site is being invalidated. A plugin may even
@@ -194,13 +210,57 @@ class ArchiveInvalidator
         $this->markArchivesInvalidated($idSites, $periodDates, $segment);
 
         $yearMonths = array_keys($periodDates);
-        $this->markInvalidatedArchivesForReprocessAndPurge($idSites, $yearMonths);
+        $this->markInvalidatedArchivesForReprocessAndPurge($idSites, $yearMonths, $hasMoreThanJustToday);
 
         foreach ($idSites as $idSite) {
             foreach ($dates as $date) {
                 $this->forgetRememberedArchivedReportsToInvalidate($idSite, $date);
             }
         }
+
+        return $invalidationInfo;
+    }
+
+    /**
+     * @param $idSites int[]
+     * @param $dates Date[]
+     * @param $period string
+     * @param $segment Segment
+     * @param bool $cascadeDown
+     * @return InvalidationResult
+     * @throws \Exception
+     */
+    public function markArchivesOverlappingRangeAsInvalidated(array $idSites, array $dates, Segment $segment = null)
+    {
+        $invalidationInfo = new InvalidationResult();
+
+        $ranges = array();
+        foreach ($dates as $dateRange) {
+            $ranges[] = $dateRange[0] . ',' . $dateRange[1];
+        }
+        $periodsByType = array(Period\Range::PERIOD_ID => $ranges);
+
+        $invalidatedMonths = array();
+        $archiveNumericTables = ArchiveTableCreator::getTablesArchivesInstalled($type = ArchiveTableCreator::NUMERIC_TABLE);
+        foreach ($archiveNumericTables as $table) {
+            $tableDate = ArchiveTableCreator::getDateFromTableName($table);
+
+            $result = $this->model->updateArchiveAsInvalidated($table, $idSites, $periodsByType, $segment);
+            $rowsAffected = $result->rowCount();
+            if ($rowsAffected > 0) {
+                $invalidatedMonths[] = $tableDate;
+            }
+        }
+
+        foreach ($idSites as $idSite) {
+            foreach ($dates as $dateRange) {
+                $this->forgetRememberedArchivedReportsToInvalidate($idSite, $dateRange[0]);
+                $invalidationInfo->processedDates[] = $dateRange[0];
+            }
+        }
+
+        $archivesToPurge = new ArchivesToPurgeDistributedList();
+        $archivesToPurge->add($invalidatedMonths);
 
         return $invalidationInfo;
     }
@@ -230,11 +290,13 @@ class ArchiveInvalidator
     {
         $periodsToInvalidate = array();
 
-        foreach ($dates as $date) {
-            if ($periodType == 'range') {
-                $date = $date . ',' . $date;
-            }
+        if ($periodType == 'range') {
+            $rangeString = $dates[0] . ',' . $dates[1];
+            $periodsToInvalidate[] = Period\Factory::build('range', $rangeString);
+            return $periodsToInvalidate;
+        }
 
+        foreach ($dates as $date) {
             $period = Period\Factory::build($periodType, $date);
             $periodsToInvalidate[] = $period;
 
@@ -242,9 +304,7 @@ class ArchiveInvalidator
                 $periodsToInvalidate = array_merge($periodsToInvalidate, $period->getAllOverlappingChildPeriods());
             }
 
-            if ($periodType != 'year'
-                && $periodType != 'range'
-            ) {
+            if ($periodType != 'year') {
                 $periodsToInvalidate[] = Period\Factory::build('year', $date);
             }
         }
@@ -264,7 +324,11 @@ class ArchiveInvalidator
             $periodType = $period->getId();
 
             $yearMonth = ArchiveTableCreator::getTableMonthFromDate($date);
-            $result[$yearMonth][$periodType][] = $date->toString();
+            $dateString = $date->toString();
+            if ($periodType == Period\Range::PERIOD_ID) {
+                $dateString = $period->getRangeString();
+            }
+            $result[$yearMonth][$periodType][] = $dateString;
         }
         return $result;
     }
@@ -351,10 +415,14 @@ class ArchiveInvalidator
      * @param array $idSites
      * @param array $yearMonths
      */
-    private function markInvalidatedArchivesForReprocessAndPurge(array $idSites, $yearMonths)
+    private function markInvalidatedArchivesForReprocessAndPurge(array $idSites, $yearMonths, $hasMoreThanJustToday)
     {
         $store = new SitesToReprocessDistributedList();
-        $store->add($idSites);
+        foreach ($idSites as $idSite) {
+            if (!empty($hasMoreThanJustToday[$idSite])) {
+                $store->add($idSite);
+            }
+        }
 
         $archivesToPurge = new ArchivesToPurgeDistributedList();
         $archivesToPurge->add($yearMonths);

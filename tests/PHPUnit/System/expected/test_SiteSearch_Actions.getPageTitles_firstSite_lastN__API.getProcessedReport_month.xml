@@ -89,13 +89,13 @@
 	<reportMetadata>
 		<result prettyDate="January 2010">
 			<row>
-				<segment>pageTitle==Im+just+a+page</segment>
+				<segment>pageTitle==Im%2Bjust%2Ba%2Bpage</segment>
 			</row>
 			<row>
-				<segment>pageTitle==Pageview%2C+not+search</segment>
+				<segment>pageTitle==Pageview%252C%2Bnot%2Bsearch</segment>
 			</row>
 			<row>
-				<segment>pageTitle==This+is+a+pageview%2C+not+a+Search+-+IS_FOLLOWING_SEARCH+ONCE</segment>
+				<segment>pageTitle==This%2Bis%2Ba%2Bpageview%252C%2Bnot%2Ba%2BSearch%2B-%2BIS_FOLLOWING_SEARCH%2BONCE</segment>
 			</row>
 		</result>
 		<result prettyDate="February 2010" />
@@ -112,14 +112,8 @@
 		<nb_hits_following_search>2</nb_hits_following_search>
 		<sum_bandwidth>0</sum_bandwidth>
 		<nb_hits_with_bandwidth>0</nb_hits_with_bandwidth>
-		<min_bandwidth />
-		<max_bandwidth />
 		<sum_daily_nb_uniq_visitors>3</sum_daily_nb_uniq_visitors>
 		<exit_nb_visits>1</exit_nb_visits>
 		<sum_daily_exit_nb_uniq_visitors>1</sum_daily_exit_nb_uniq_visitors>
-		<avg_bandwidth>0</avg_bandwidth>
-		<avg_time_on_page>63</avg_time_on_page>
-		<bounce_rate>0%</bounce_rate>
-		<exit_rate>33%</exit_rate>
 	</reportTotal>
 </result>

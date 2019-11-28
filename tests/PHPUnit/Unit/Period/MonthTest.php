@@ -2,7 +2,7 @@
 /**
  * Piwik - free/libre analytics platform
  *
- * @link http://piwik.org
+ * @link https://matomo.org
  * @license http://www.gnu.org/licenses/gpl-3.0.html GPL v3 or later
  */
 
@@ -334,7 +334,7 @@ class MonthTest extends BasePeriodTest
     {
         return array(
             array('en', 'October 2024'),
-            array('lt', '2024 m. Spalis'),
+            array('lt', '2024 m. spalis'),
             array('zh-cn', '2024年10月'),
         );
     }

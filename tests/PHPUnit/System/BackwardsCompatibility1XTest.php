@@ -2,7 +2,7 @@
 /**
  * Piwik - free/libre analytics platform
  *
- * @link http://piwik.org
+ * @link https://matomo.org
  * @license http://www.gnu.org/licenses/gpl-3.0.html GPL v3 or later
  */
 namespace Piwik\Tests\System;
@@ -97,7 +97,12 @@ class BackwardsCompatibility1XTest extends SystemTestCase
             'otherRequestParameters' => array(
                 // when changing this, might also need to change the same line in OneVisitorTwoVisitsTest.php
                 'hideColumns' => 'nb_users,sum_bandwidth,nb_hits_with_bandwidth,min_bandwidth,max_bandwidth',
-            )
+            ),
+            'xmlFieldsToRemove' => [
+                'entry_sum_visit_length',
+                'sum_visit_length',
+                'nb_visits_converted',
+            ],
         );
 
         /**
@@ -122,6 +127,9 @@ class BackwardsCompatibility1XTest extends SystemTestCase
 
             // new flag dimensions
             'UserCountry.getCountry',
+
+            'Tour.getLevel',
+            'Tour.getChallenges'
         );
 
         $apiNotToCall = array(
@@ -149,9 +157,11 @@ class BackwardsCompatibility1XTest extends SystemTestCase
             'VisitTime.getVisitInformationPerLocalTime',
             'VisitTime.getVisitInformationPerServerTime',
 
-             // the Action.getPageTitles test fails for unknown reason, so skipping it
+             // the Actions.getPageTitles test fails for unknown reason, so skipping it
              // eg. https://travis-ci.org/piwik/piwik/jobs/24449365
-            'Action.getPageTitles',
+            'Actions.getPageTitles',
+            'Actions.getEntryPageTitles', // segment values can differ due to missing metadata in old reports
+            'Actions.getExitPageTitles',
 
             // Outlinks now tracked with URL Fragment which was not the case in 1.X
             'Actions.get',
@@ -160,7 +170,11 @@ class BackwardsCompatibility1XTest extends SystemTestCase
 
             // system settings such as enable_plugin_update_communication are enabled by default in newest version,
             // but ugpraded Piwik are not
-            'CorePluginsAdmin.getSystemSettings'
+            'CorePluginsAdmin.getSystemSettings',
+
+            // visit length changes slightly with change to previous visitor detection in #13935
+            'VisitsSummary.getSumVisitsLength',
+            'VisitsSummary.getSumVisitsLengthPretty',
         );
 
         $apiNotToCall = array_merge($apiNotToCall, $reportsToCompareSeparately);

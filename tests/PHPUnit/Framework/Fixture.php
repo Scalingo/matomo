@@ -2,7 +2,7 @@
 /**
  * Piwik - free/libre analytics platform
  *
- * @link http://piwik.org
+ * @link https://matomo.org
  * @license http://www.gnu.org/licenses/gpl-3.0.html GPL v3 or later
  */
 namespace Piwik\Tests\Framework;
@@ -26,12 +26,13 @@ use Piwik\DbHelper;
 use Piwik\FrontController;
 use Piwik\Ini\IniReader;
 use Piwik\Log;
+use Piwik\NumberFormatter;
 use Piwik\Option;
 use Piwik\Piwik;
 use Piwik\Plugin;
 use Piwik\Plugin\Manager;
 use Piwik\Plugins\API\ProcessedReport;
-use Piwik\Plugins\LanguagesManager\API as APILanguageManager;
+use Piwik\Plugins\LanguagesManager\API as APILanguagesManager;
 use Piwik\Plugins\MobileMessaging\MobileMessaging;
 use Piwik\Plugins\PrivacyManager\DoNotTrackHeaderChecker;
 use Piwik\Plugins\PrivacyManager\IPAnonymizer;
@@ -199,7 +200,7 @@ class Fixture extends \PHPUnit_Framework_Assert
         $this->dbName = $this->getDbName();
 
         if ($this->persistFixtureData) {
-            $this->dropDatabaseInSetUp = false;
+            $this->dropDatabaseInSetUp = getenv('DROP') == 1;
             $this->dropDatabaseInTearDown = false;
             $this->overwriteExisting = false;
             $this->removeExistingSuperUser = false;
@@ -293,10 +294,13 @@ class Fixture extends \PHPUnit_Framework_Assert
                 $this->loginAsSuperUser();
             }
 
-            APILanguageManager::getInstance()->setLanguageForUser('superUserLogin', 'en');
+            APILanguagesManager::getInstance()->setLanguageForUser('superUserLogin', 'en');
         }
 
         SettingsPiwik::overwritePiwikUrl(self::getTestRootUrl());
+
+        $testEnv->tokenAuth = self::getTokenAuth();
+        $testEnv->save();
 
         if ($setupEnvironmentOnly) {
             return;
@@ -374,6 +378,7 @@ class Fixture extends \PHPUnit_Framework_Assert
         Option::clearCache();
         Site::clearCache();
         Cache::deleteTrackerCache();
+        NumberFormatter::getInstance()->clearCache();
         PiwikCache::getTransientCache()->flushAll();
         PiwikCache::getEagerCache()->flushAll();
         PiwikCache::getLazyCache()->flushAll();
@@ -639,6 +644,17 @@ class Fixture extends \PHPUnit_Framework_Assert
         );
     }
 
+    public static function checkTrackingFailureResponse($response)
+    {
+        $trans_gif_64 = "R0lGODlhAQABAIAAAAAAAAAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==";
+        $expectedResponse = base64_decode($trans_gif_64);
+
+        self::assertContains($expectedResponse, $response);
+        self::assertContains('This resource is part of Matomo.', $response);
+        self::assertNotContains('Error', $response);
+        self::assertNotContains('Fatal', $response);
+    }
+
     /**
      * Checks that the response from bulk tracking is a valid JSON
      * string. Will fail the test if JSON status is not success.
@@ -879,7 +895,7 @@ class Fixture extends \PHPUnit_Framework_Assert
         // on travis ci make sure log importer won't hang forever, otherwise the output will never be printed
         // and no one will know why the build fails.
         if (SystemTestCase::isTravisCI()) {
-            $cmd = "timeout 5m $cmd";
+            $cmd = "timeout 10m $cmd";
         }
 
         exec($cmd, $output, $result);

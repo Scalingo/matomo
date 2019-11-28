@@ -2,7 +2,7 @@
 /**
  * Piwik - free/libre analytics platform
  *
- * @link http://piwik.org
+ * @link https://matomo.org
  * @license http://www.gnu.org/licenses/gpl-3.0.html GPL v3 or later
  *
  */
@@ -37,6 +37,20 @@ class JoinTablesTest extends \PHPUnit_Framework_TestCase
     public function test_construct_shouldThrowException_IfTableIsNotPossibleToJoin()
     {
         $this->makeTables(array('log_visit', 'log_foo_bar_baz'));
+    }
+
+    public function test_hasJoinedTable_custom()
+    {
+        $tables = $this->makeTables(array('log_visit', 'log_custom'));
+        $this->assertTrue($tables->hasJoinedTable('log_visit'));
+        $this->assertTrue($tables->hasJoinedTable('log_custom'));
+    }
+
+    public function test_hasJoinedTable_custom2()
+    {
+        $tables = $this->makeTables(array('log_visit', 'log_custom_other'));
+        $this->assertTrue($tables->hasJoinedTable('log_visit'));
+        $this->assertTrue($tables->hasJoinedTable('log_custom_other'));
     }
 
     public function test_hasJoinedTable_shouldDetectIfTableIsAlreadyAdded()
