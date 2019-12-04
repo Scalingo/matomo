@@ -2,7 +2,7 @@
 /**
  * Piwik - free/libre analytics platform
  *
- * @link http://piwik.org
+ * @link https://matomo.org
  * @license http://www.gnu.org/licenses/gpl-3.0.html GPL v3 or later
  *
  */
@@ -214,5 +214,10 @@ class SettingsServer
         // in the event one or the other is disabled...
         @ini_set('max_execution_time', $executionTime);
         @set_time_limit($executionTime);
+    }
+
+    public static function isMac()
+    {
+        return defined('PHP_OS') && PHP_OS === 'Darwin';
     }
 }

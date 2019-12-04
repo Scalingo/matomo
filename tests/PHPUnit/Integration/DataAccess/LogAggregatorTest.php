@@ -2,7 +2,7 @@
 /**
  * Piwik - free/libre analytics platform
  *
- * @link http://piwik.org
+ * @link https://matomo.org
  * @license http://www.gnu.org/licenses/gpl-3.0.html GPL v3 or later
  */
 
@@ -127,7 +127,7 @@ class LogAggregatorTest extends IntegrationTestCase
                 2 => '1',
                 3 => '1',
                 4 => '1',
-                5 => '0',
+                5 => '1',
                 6 => '1',
                 7 => '1',
                 39 => '0',

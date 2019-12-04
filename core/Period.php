@@ -2,7 +2,7 @@
 /**
  * Piwik - free/libre analytics platform
  *
- * @link http://piwik.org
+ * @link https://matomo.org
  * @license http://www.gnu.org/licenses/gpl-3.0.html GPL v3 or later
  *
  */
@@ -366,7 +366,7 @@ abstract class Period
         list($formatStart, $formatEnd) = $this->explodeFormat($format);
 
         $string = $dateStart->getLocalized($formatStart);
-        $string .= $dateEnd->getLocalized($formatEnd);
+        $string .= $dateEnd->getLocalized($formatEnd, false);
 
         return $string;
     }

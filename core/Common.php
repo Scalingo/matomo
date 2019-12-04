@@ -2,7 +2,7 @@
 /**
  * Piwik - free/libre analytics platform
  *
- * @link http://piwik.org
+ * @link https://matomo.org
  * @license http://www.gnu.org/licenses/gpl-3.0.html GPL v3 or later
  *
  */
@@ -635,7 +635,6 @@ class Common
 
     /**
      * Generate random string.
-     * Do not use for security related purposes (the string is not truly random).
      *
      * @param int $length string length
      * @param string $alphabet characters allowed in random string
@@ -1260,34 +1259,20 @@ class Common
     }
 
     /**
-     * @todo This method is weird, it's debugging statements but seem to only work for the tracker, maybe it
-     * should be moved elsewhere
+     * @deprecated Use the logger directly instead.
      */
     public static function printDebug($info = '')
     {
-        if (isset($GLOBALS['PIWIK_TRACKER_DEBUG']) && $GLOBALS['PIWIK_TRACKER_DEBUG']) {
-            if (!headers_sent()) {
-                // prevent XSS in tracker debug output
-                Common::sendHeader('Content-type: text/plain');
-            }
+        if (is_object($info)) {
+            $info = var_export($info, true);
+        }
 
-            if (is_object($info)) {
-                $info = var_export($info, true);
-            }
-
-            $logger = StaticContainer::get('Psr\Log\LoggerInterface');
-
-            if (is_array($info) || is_object($info)) {
-                $info = Common::sanitizeInputValues($info);
-                $out = var_export($info, true);
-                foreach (explode("\n", $out) as $line) {
-                    $logger->debug($line);
-                }
-            } else {
-                foreach (explode("\n", $info) as $line) {
-                    $logger->debug($line);
-                }
-            }
+        $logger = StaticContainer::get('Psr\Log\LoggerInterface');
+        if (is_array($info) || is_object($info)) {
+            $out = var_export($info, true);
+            $logger->debug($out);
+        } else {
+            $logger->debug($info);
         }
     }
 

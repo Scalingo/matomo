@@ -2,7 +2,7 @@
 /**
  * Piwik - free/libre analytics platform
  *
- * @link http://piwik.org
+ * @link https://matomo.org
  * @license http://www.gnu.org/licenses/gpl-3.0.html GPL v3 or later
  */
 
@@ -395,7 +395,7 @@ class VisitTest extends IntegrationTestCase
         $currentActionTime = Date::today()->getDatetime();
         $idsite = API::getInstance()->addSite('name', 'http://piwik.net/');
 
-        $expectedRemembered = array();
+        $expectedRemembered = array(Date::today()->toString() => [1]);
 
         $this->assertRememberedArchivedReportsThatShouldBeInvalidated($idsite, $currentActionTime, $expectedRemembered);
     }
@@ -414,11 +414,13 @@ class VisitTest extends IntegrationTestCase
 
     public function test_markArchivedReportsAsInvalidIfArchiveAlreadyFinished_shouldConsiderWebsitesTimezone()
     {
-        $timezone1 = 'UTC+4';
-        $timezone2 = 'UTC+6';
+        // The double-handling below is needed to work around weird behaviour when UTC and UTC+5 are different dates
+        // Example: 4:32am on 1 April in UTC+5 is 11:32pm on 31 March in UTC
+        $midnight = Date::factoryInTimezone('today', 'UTC+5')->setTimezone('UTC+5');
+        $today = Date::factoryInTimezone('today', 'UTC+5');
 
-        $currentActionTime1 = Date::today()->setTimezone($timezone1)->getDatetime();
-        $currentActionTime2 = Date::today()->setTimezone($timezone2)->getDatetime();
+        $oneHourAfterMidnight = $midnight->addHour(1)->getDatetime();
+        $oneHourBeforeMidnight = $midnight->subHour(1)->getDatetime();
         $idsite = API::getInstance()->addSite('name', 'http://piwik.net/', $ecommerce = null,
             $siteSearch = null,
             $searchKeywordParameters = null,
@@ -428,12 +430,13 @@ class VisitTest extends IntegrationTestCase
             $timezone = 'UTC+5');
 
         $expectedRemembered = array(
-            substr($currentActionTime1, 0, 10) => array($idsite)
+            substr($oneHourAfterMidnight, 0, 10) => array($idsite),
+            $today->toString() => [$idsite],
         );
 
         // if website timezone was von considered both would be today (expected = array())
-        $this->assertRememberedArchivedReportsThatShouldBeInvalidated($idsite, $currentActionTime1, array());
-        $this->assertRememberedArchivedReportsThatShouldBeInvalidated($idsite, $currentActionTime2, $expectedRemembered);
+        $this->assertRememberedArchivedReportsThatShouldBeInvalidated($idsite, $oneHourAfterMidnight, array($today->toString() => [$idsite]));
+        $this->assertRememberedArchivedReportsThatShouldBeInvalidated($idsite, $oneHourBeforeMidnight, $expectedRemembered);
     }
 
     private function assertRememberedArchivedReportsThatShouldBeInvalidated($idsite, $requestDate, $expectedRemeberedArchivedReports)
