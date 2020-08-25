@@ -57,6 +57,17 @@ class SettingsServer
     }
 
     /**
+     * Returns true if Matomo is running within Matomo for WordPress.
+     *
+     * @return bool  true if Matomo is running in WordPress, false if Matomo is running as part of On-Premise
+     * @api
+     */
+    public static function isMatomoForWordPress()
+    {
+        return defined( 'ABSPATH') && function_exists('\add_action');
+    }
+
+    /**
      * Returns `true` if running on Microsoft IIS 7 (or above), `false` if otherwise.
      *
      * @return bool
@@ -131,6 +142,11 @@ class SettingsServer
      */
     public static function raiseMemoryLimitIfNecessary()
     {
+        if (self::isArchivePhpTriggered()) {
+            // core:archive command: no time limit
+            self::setMaxExecutionTime( 0 );
+        }
+
         $memoryLimit = self::getMemoryLimitValue();
         if ($memoryLimit === false) {
             return false;
@@ -138,8 +154,7 @@ class SettingsServer
         $minimumMemoryLimit = Config::getInstance()->General['minimum_memory_limit'];
 
         if (self::isArchivePhpTriggered()) {
-            // core:archive command: no time limit, high memory limit
-            self::setMaxExecutionTime(0);
+            // core:archive command:  high memory limit
             $minimumMemoryLimitWhenArchiving = Config::getInstance()->General['minimum_memory_limit_when_archiving'];
             if ($memoryLimit < $minimumMemoryLimitWhenArchiving) {
                 return self::setMemoryLimit($minimumMemoryLimitWhenArchiving);

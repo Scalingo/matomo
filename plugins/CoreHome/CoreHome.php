@@ -8,14 +8,19 @@
  */
 namespace Piwik\Plugins\CoreHome;
 
+use Piwik\Archive\ArchiveInvalidator;
 use Piwik\Columns\ComputedMetricFactory;
 use Piwik\Columns\MetricsList;
+use Piwik\Common;
+use Piwik\Container\StaticContainer;
+use Piwik\DbHelper;
 use Piwik\IP;
 use Piwik\Piwik;
 use Piwik\Plugin\ArchivedMetric;
 use Piwik\Plugin\ComputedMetric;
 use Piwik\Plugin\ThemeStyles;
 use Piwik\SettingsServer;
+use Piwik\Tracker\Model as TrackerModel;
 
 /**
  *
@@ -43,7 +48,23 @@ class CoreHome extends \Piwik\Plugin
             'Request.initAuthenticationObject' => 'initAuthenticationObject',
             'AssetManager.addStylesheets' => 'addStylesheets',
             'Request.dispatchCoreAndPluginUpdatesScreen' => 'initAuthenticationObject',
+            'Tracker.setTrackerCacheGeneral' => 'setTrackerCacheGeneral',
         );
+    }
+
+    public function isTrackerPlugin()
+    {
+        return true;
+    }
+
+    public function setTrackerCacheGeneral(&$cacheGeneral)
+    {
+        /** @var ArchiveInvalidator $archiveInvalidator */
+        $archiveInvalidator = StaticContainer::get(ArchiveInvalidator::class);
+        $cacheGeneral[ArchiveInvalidator::TRACKER_CACHE_KEY] = $archiveInvalidator->getAllRememberToInvalidateArchivedReportsLater();
+
+        $hasIndex = DbHelper::tableHasIndex(Common::prefixTable('log_visit'), 'index_idsite_idvisitor');
+        $cacheGeneral[TrackerModel::CACHE_KEY_INDEX_IDSITE_IDVISITOR] = $hasIndex;
     }
 
     public function addStylesheets(&$mergedContent)

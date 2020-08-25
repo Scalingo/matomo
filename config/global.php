@@ -79,6 +79,8 @@ return array(
     'Piwik\Translation\Loader\LoaderInterface' => DI\object('Piwik\Translation\Loader\LoaderCache')
         ->constructor(DI\get('Piwik\Translation\Loader\JsonFileLoader')),
 
+    'DeviceDetector\Cache\Cache' => DI\object('Piwik\DeviceDetector\DeviceDetectorCache')->constructor(86400),
+
     'observers.global' => array(),
 
     /**
@@ -216,4 +218,6 @@ return array(
     'archiving.performance.logger' => null,
 
     \Piwik\CronArchive\Performance\Logger::class => DI\object()->constructorParameter('logger', DI\get('archiving.performance.logger')),
+
+    \Piwik\Concurrency\LockBackend::class => \DI\get(\Piwik\Concurrency\LockBackend\MySqlLockBackend::class),
 );
