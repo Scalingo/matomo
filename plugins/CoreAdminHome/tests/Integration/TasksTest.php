@@ -132,6 +132,8 @@ class TasksTest extends IntegrationTestCase
         $tasks = array_map(function (Task $task) { return $task->getMethodName() . '.' . $task->getMethodParameter(); }, $tasks);
 
         $expected = [
+            'invalidateOutdatedArchives.',
+            'deleteOldFingerprintSalts.',
             'purgeOutdatedArchives.',
             'purgeInvalidatedArchives.',
             'purgeOrphanedArchives.',

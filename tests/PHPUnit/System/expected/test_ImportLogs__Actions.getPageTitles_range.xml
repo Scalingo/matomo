@@ -2,7 +2,7 @@
 <result>
 	<row>
 		<label> Page Name not defined</label>
-		<nb_visits>34</nb_visits>
+		<nb_visits>33</nb_visits>
 		<nb_hits>44</nb_hits>
 		<sum_time_spent>0</sum_time_spent>
 		<nb_hits_with_time_generation>17</nb_hits_with_time_generation>
@@ -18,7 +18,7 @@
 		<bounce_rate>0%</bounce_rate>
 		<exit_rate>0%</exit_rate>
 		<avg_time_generation>0.283</avg_time_generation>
-		<segment>pageTitle==Page%2BName%2Bnot%2Bdefined</segment>
+		<segment>pageTitle==</segment>
 	</row>
 	<row>
 		<label> Liberate Web Analytics - Analytics - Piwik</label>

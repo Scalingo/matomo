@@ -13,6 +13,7 @@ use Piwik\Common;
 use Piwik\Container\StaticContainer;
 use Piwik\Filesystem;
 use Piwik\Http;
+use Piwik\Piwik;
 use Piwik\Plugin;
 use Piwik\Plugins\Marketplace\Environment;
 use Piwik\Plugins\Marketplace\Api\Service;
@@ -177,8 +178,9 @@ class Client
         }
 
         $params = array('plugins' => $params);
+        $params = array('plugins' => json_encode($params));
 
-        $hasUpdates = $this->fetch('plugins/checkUpdates', array('plugins' => json_encode($params)));
+        $hasUpdates = $this->fetch('plugins/checkUpdates', $params);
 
         if (empty($hasUpdates)) {
             return array();

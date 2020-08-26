@@ -20,6 +20,7 @@ use Piwik\Network\IPUtils;
 use Piwik\Piwik;
 use Piwik\Plugins\CustomVariables\CustomVariables;
 use Piwik\Plugins\UsersManager\UsersManager;
+use Piwik\ProxyHttp;
 use Piwik\Tracker;
 use Piwik\Cache as PiwikCache;
 
@@ -657,7 +658,7 @@ class Request
         return substr(trim($input), 0, CustomVariables::getMaxLengthCustomVariables());
     }
 
-    protected function shouldUseThirdPartyCookie()
+    public function shouldUseThirdPartyCookie()
     {
         return (bool)Config::getInstance()->Tracker['use_third_party_id_cookie'];
     }
@@ -683,10 +684,19 @@ class Request
             return;
         }
 
+        if (\Piwik\Tracker\IgnoreCookie::isIgnoreCookieFound()) {
+            return;
+        }
+
         $cookie = $this->makeThirdPartyCookieUID();
         $idVisitor = bin2hex($idVisitor);
         $cookie->set(0, $idVisitor);
-        $cookie->save();
+        if (ProxyHttp::isHttps()) {
+            $cookie->setSecure(true);
+            $cookie->save('None');
+        } else {
+            $cookie->save('Lax');
+        }
 
         Common::printDebug(sprintf("We set the visitor ID to %s in the 3rd party cookie...", $idVisitor));
     }

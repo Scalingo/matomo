@@ -185,4 +185,62 @@ class Session extends Zend_Session
     {
         return self::$sessionStarted;
     }
+
+    public static function getSameSiteCookieValue()
+    {
+        $config = Config::getInstance();
+        $general = $config->General;
+
+        $module = Piwik::getModule();
+        $action = Piwik::getAction();
+
+        $isOptOutRequest = $module == 'CoreAdminHome' && $action == 'optOut';
+        $isOverlay = $module == 'Overlay';
+        $shouldUseNone = !empty($general['enable_framed_pages']) || $isOptOutRequest || $isOverlay;
+
+        if ($shouldUseNone && ProxyHttp::isHttps()) {
+            return 'None';
+        }
+
+        return 'Lax';
+    }
+
+    /**
+     * Write cookie header.  Similar to the native setcookie() function but also supports
+     * the SameSite cookie property.
+     * @param $name
+     * @param $value
+     * @param int $expires
+     * @param string $path
+     * @param string $domain
+     * @param bool $secure
+     * @param bool $httpOnly
+     * @param string $sameSite
+     * @return string
+     */
+    public static function writeCookie($name, $value, $expires = 0, $path = '/', $domain = '/', $secure = false, $httpOnly = false, $sameSite = 'lax')
+    {
+        $headerStr = 'Set-Cookie: ' . rawurlencode($name) . '=' . rawurlencode($value);
+        if ($expires) {
+            $headerStr .= '; expires=' . gmdate('D, d-M-Y H:i:s', $expires) . ' GMT';
+        }
+        if ($path) {
+            $headerStr .= '; path=' . $path;
+        }
+        if ($domain) {
+            $headerStr .= '; domain=' . rawurlencode($domain);
+        }
+        if ($secure) {
+            $headerStr .= '; secure';
+        }
+        if ($httpOnly) {
+            $headerStr .= '; httponly';
+        }
+        if ($sameSite) {
+            $headerStr .= '; SameSite=' . $sameSite;
+        }
+
+        Common::sendHeader($headerStr);
+        return $headerStr;
+    }
 }

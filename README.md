@@ -19,7 +19,7 @@ Three additional plugins have been added additionally to the standard distributi
 * DbCommands: Written by us to initialize the database with a console command: `database:create-tables`
 * AdminCommands: Written by us to create a super user or a site: `admin:create-superuser` or `admin:create-site`
 
-![Scalingo Matomo installed version : 3.13.0](https://img.shields.io/static/v1?label=Scalingo%20Matomo%20installed%20version&message=3.13.0&color=informational)
+![Scalingo Matomo installed version : 3.14.0](https://img.shields.io/static/v1?label=Scalingo%20Matomo%20installed%20version&message=3.13.0&color=informational)
 
 You can deploy your own version of Matomo with this button:
 
@@ -85,7 +85,7 @@ See https://matomo.org/docs/installation/
 
 ## Free trial 
 
-If you do not have a server or don't want to host yourself you can use our Matomo Cloud partner service (30 day free trial): https://matomo.org/start-30-day-free-analytics-trial/
+If you do not have a server or don't want to host yourself you can use our Matomo Cloud partner service (21 day free trial): https://matomo.org/start-free-analytics-trial/
 
 ## Online Demo
 

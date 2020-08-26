@@ -47,6 +47,9 @@ function getContentToken() {
 function getHeartbeatToken() {
     return "<?php $token = md5(uniqid(mt_rand(), true)); echo $token; ?>";
 }
+function getCookieConsentToken() {
+    return "<?php $token = md5(uniqid(mt_rand(), true)); echo $token; ?>";
+}
 function getConsentToken() {
     return "<?php $token = md5(uniqid(mt_rand(), true)); echo $token; ?>";
 }
@@ -530,7 +533,9 @@ function PiwikTest() {
 
                 // we fix the line numbers so they match to the line numbers in ../../js/piwik.js
                 JSLINT.errors.forEach( function (item, index) {
-                    item.line += countOfLinesRemoved;
+                    if (item) {
+                        item.line += countOfLinesRemoved;
+                    }
                     console.log(item);
                 });
 
@@ -2149,7 +2154,7 @@ function PiwikTest() {
     });
 
     test("API methods", function() {
-        expect(109);
+        expect(117);
 
         equal( typeof Piwik.addPlugin, 'function', 'addPlugin' );
         equal( typeof Piwik.addPlugin, 'function', 'addTracker' );
@@ -2180,6 +2185,7 @@ function PiwikTest() {
         equal( typeof tracker.resetUserId, 'function', 'resetUserId' );
         equal( typeof tracker.setUserId, 'function', 'setUserId' );
         equal( typeof tracker.setSiteId, 'function', 'setSiteId' );
+        equal( typeof tracker.setVisitorId, 'function', 'setVisitorId' );
         equal( typeof tracker.setCustomData, 'function', 'setCustomData' );
         equal( typeof tracker.getCustomData, 'function', 'getCustomData' );
         equal( typeof tracker.setCustomRequestProcessing, 'function', 'setCustomRequestProcessing' );
@@ -2243,7 +2249,13 @@ function PiwikTest() {
         equal( typeof tracker.disableQueueRequest, 'function', 'disableQueueRequest' );
         equal( typeof tracker.setRequestQueueInterval, 'function', 'setRequestQueueInterval' );
         equal( typeof tracker.disableCookies, 'function', 'disableCookies' );
+        equal( typeof tracker.setCookieConsentGiven, 'function', 'setCookieConsentGiven' );
+        equal( typeof tracker.areCookiesEnabled, 'function', 'areCookiesEnabled' );
         equal( typeof tracker.deleteCookies, 'function', 'deleteCookies' );
+        equal( typeof tracker.requireCookieConsent, 'function', 'requireCookieConsent' );
+        equal( typeof tracker.getRememberedCookieConsent, 'function', 'getRememberedCookieConsent' );
+        equal( typeof tracker.rememberCookieConsentGiven, 'function', 'rememberCookieConsentGiven' );
+        equal( typeof tracker.forgetCookieConsentGiven, 'function', 'forgetCookieConsentGiven' );
         // content
         equal( typeof tracker.trackAllContentImpressions, 'function', 'trackAllContentImpressions' );
         equal( typeof tracker.trackVisibleContentImpressions, 'function', 'trackVisibleContentImpressions' );
@@ -2263,6 +2275,7 @@ function PiwikTest() {
         // consent
         equal( typeof tracker.getRememberedConsent, 'function', 'getRememberedConsent' );
         equal( typeof tracker.hasRememberedConsent, 'function', 'hasRememberedConsent' );
+        equal( typeof tracker.isConsentRequired, 'function', 'isConsentRequired' );
         equal( typeof tracker.requireConsent, 'function', 'requireConsent' );
         equal( typeof tracker.setConsentGiven, 'function', 'setConsentGiven' );
         equal( typeof tracker.rememberConsentGiven, 'function', 'rememberConsentGiven' );
@@ -3189,7 +3202,7 @@ function PiwikTest() {
     }
 
     test("User ID and Visitor UUID", function() {
-        expect(27);
+        expect(28);
         deleteCookies();
 
         var userIdString = 'userid@mydomain.org';
@@ -3214,6 +3227,11 @@ function PiwikTest() {
         // Check that Visitor ID is the same when requested multiple times
         var visitorId = tracker.getVisitorId();
         equal(visitorId, tracker.getVisitorId(), "Visitor ID is the same when called multiple times");
+
+        tracker.setVisitorId('invalid'); // invalid characters
+        tracker.setVisitorId('012345abc'); // too short
+        tracker.setVisitorId('');
+        equal(visitorId, tracker.getVisitorId(), "Visitor ID is not updated when invalid");
 
         // Check that setting an empty user id will not change the visitor ID
         var userId = '';
@@ -3597,7 +3615,7 @@ if ($mysql) {
     });
 
     test("tracking with sendBeacon", function() {
-        expect(9);
+        expect(11);
 
         var tracker = Piwik.getTracker();
         tracker.setTrackerUrl("matomo.php");
@@ -3615,6 +3633,9 @@ if ($mysql) {
             ok(event.request.indexOf('action_name=') === 0, 'contains request');
         });
 
+        tracker.queueRequest('action_name=Queue1'); // these 2 will be sent as bulk request
+        tracker.queueRequest('action_name=Queue2');
+
         stop();
         setTimeout(function() {
             ok(callbackCalled, 'called the callback');
@@ -3624,13 +3645,15 @@ if ($mysql) {
             xhr.send(null);
             var results = xhr.responseText;
             var m = /<span\>([0-9]+)\<\/span\>/.exec(results);
-            equal( m ? m[1] : 0, "2", "count tracking events" );
+            equal( m ? m[1] : 0, "4", "count tracking events" );
 
             ok(results.indexOf('matomo.php?action_name=' + shortTitle + '&') >= 0, "trackPageView() sends small request");
             ok(results.indexOf('matomo.php?action_name=' + longTitle + '&') >= 0, "trackPageView() sends long request");
+            ok(results.indexOf('matomo.php?action_name=Queue1&') >= 0, "queueRequest() sends bulk request 1");
+            ok(results.indexOf('matomo.php?action_name=Queue2&') >= 0, "queueRequest() sends bulk request 2");
 
             start();
-        }, 2000);
+        }, 6000);
     });
 
 
@@ -4372,6 +4395,7 @@ if ($mysql) {
 
         function resetTracker(track, token, replace)
         {
+            tracker.getRequestQueue().sendRequests(); // make sure to send any remaining queued requests
             tracker.clearTrackedContentImpressions();
             tracker.clearEnableTrackOnlyVisibleContent();
             tracker.setCustomData('token', token);
@@ -4444,7 +4468,7 @@ if ($mysql) {
         tracker.trackAllContentImpressions();
         strictEqual(tracker.getTrackedContentImpressions().length, 7, 'should mark 7 content blocks as tracked');
 
-        wait(300);
+        wait(3000);
 
         var token2 = '2' + token;
         resetTracker(tracker, token2);
@@ -4456,7 +4480,7 @@ if ($mysql) {
         tracker.trackContentImpressionsWithinNode(_e('click1'));
         strictEqual(tracker.getTrackedContentImpressions().length, 0, 'should not track anything as does not contain content block');
 
-        wait(300);
+        wait(3000);
 
         var token3 = '3' + token;
         resetTracker(tracker, token3);
@@ -4466,17 +4490,17 @@ if ($mysql) {
         tracker.trackContentImpression('Any://Name', 'AnyPiece?', 'http://www.example.com');
         strictEqual(tracker.getTrackedContentImpressions().length, 0, 'manual impression call should not be marked as already tracked');
 
-        wait(300);
+        wait(3000);
 
         var token4 = '4' + token;
         resetTracker(tracker, token4);
         tracker.trackContentInteraction(); // should not track anything as interaction and name is required
         tracker.trackContentInteraction('Clicki'); // should not track anything as interaction and name is required
         tracker.trackContentInteraction('Clicke', 'IntName'); // should use default for piece and ignore target as it is not set
-        wait(500);
+        wait(300);
         tracker.trackContentInteraction('Clicki', 'IntN:/ame', 'IntPiece?', 'http://int.example.com');
 
-        wait(300);
+        wait(3000);
 
         setupContentTrackingFixture('trackingContent', document.body);
 
@@ -4484,7 +4508,7 @@ if ($mysql) {
         resetTracker(tracker, token5);
         tracker.trackContentInteractionNode(_s('#ex5'), 'Clicki?iii');
 
-        wait(300);
+        wait(3000);
 
         var token6 = '6' + token;
         resetTracker(tracker, token6);
@@ -4492,6 +4516,8 @@ if ($mysql) {
         tracker.trackAllContentImpressions();
         expected = [contentBlocks[7], contentBlocks[6], contentBlocks[5], contentBlocks[1], contentBlocks[4], contentBlocks[3], contentBlocks[2]];
         propEqual(tracker.getTrackedContentImpressions().length, 7, 'should still track all impressions even if visible enabled');
+
+        wait(3000);
 
         var token7 = '7' + token;
         resetTracker(tracker, token7);
@@ -4504,8 +4530,7 @@ if ($mysql) {
         expected = [contentBlocks[6], contentBlocks[5]];
         propEqual(tracker.getTrackedContentImpressions(), expected, 'should track the two visible ones');
 
-
-        wait(300);
+        wait(3000);
 
         var token8 = '8' + token;
         resetTracker(tracker, token8);
@@ -4513,8 +4538,7 @@ if ($mysql) {
         expected = [contentBlocks[6], contentBlocks[5], contentBlocks[1]];
         propEqual(tracker.getTrackedContentImpressions(), expected, 'should only track all visible impressions');
 
-
-        wait(300);
+        wait(3000);
 
         // test detection of content via interval
         var token9  = '9' + token;
@@ -4569,6 +4593,7 @@ if ($mysql) {
 
             // trackAllContentImpressions()
             var results = fetchTrackedRequests(token);
+
             equal( (/<span\>([0-9]+)\<\/span\>/.exec(results))[1], "7", "count trackAllContentImpressions requests. all content blocks should be tracked" );
 
             var requests = results.match(/<span\>(.*?)\<\/span\>/g);
@@ -4688,7 +4713,7 @@ if ($mysql) {
             equal( (/<span\>([0-9]+)\<\/span\>/.exec(results))[1], "6", "count automatically tracked requests, via scroll. " );
 
             start();
-        }, 7000);
+        }, 13000);
 
         expected =
             [
@@ -4930,7 +4955,7 @@ if ($mysql) {
     });
 
     test("Test API - consent", function() {
-        expect(27);
+        expect(34);
 
         var queue;
         var tracker = Piwik.getTracker();
@@ -4940,7 +4965,14 @@ if ($mysql) {
         strictEqual(tracker.getRememberedConsent(), null, "getConsentRequestsQueue, does not return consent cookie content as no consent given" );
         strictEqual(tracker.hasConsent(), true, "hasConsent, assumes consent by default" );
 
+        ok(!tracker.isConsentRequired(), 'by default consent is not required');
+        ok(tracker.areCookiesEnabled(), 'by default cookies are enabled');
         tracker.requireConsent();
+        ok(!tracker.areCookiesEnabled(), 'require consent disables cookies');
+
+
+
+        ok(tracker.isConsentRequired(), 'consent is required after requiring it')
         deepEqual(tracker.getConsentRequestsQueue(), [], "getConsentRequestsQueue, still empty after requiring consent" );
 
         tracker.trackRequest('myFoo=bar&baz=1');
@@ -4958,7 +4990,10 @@ if ($mysql) {
         strictEqual(tracker.hasRememberedConsent(), false, "getConsentRequestsQueue, has not remembered consent" );
         strictEqual(tracker.getRememberedConsent(), null, "getConsentRequestsQueue, does not return consent cookie content as no consent given" );
 
+        tracker.requireConsent();
+        ok(!tracker.areCookiesEnabled(), 'after requiring consent, cookies are disabled');
         tracker.rememberConsentGiven();
+        ok(tracker.areCookiesEnabled(), 'remember cookie consent enables cookies');
 
         strictEqual(tracker.hasRememberedConsent(), true, "rememberConsentGiven, sets cookie to remember consent" );
         var rememberedConsent = tracker.getRememberedConsent();
@@ -4986,13 +5021,57 @@ if ($mysql) {
             var results = fetchTrackedRequests(getConsentToken() + '1');
             strictEqual(true, results.indexOf('myFoo=bar&baz=1') > 0, "setConsentGiven does replay all queued requests" );
             strictEqual(true, results.indexOf('myFoo=bar&baz=2') > 0, "setConsentGiven does replay all queued requests" );
-            strictEqual(2, (results.match(/consent=1/g) || []).length, "consent=1 parameter appears in URL when explicit consent given");
+            strictEqual(true, results.indexOf('ping=1') > 0, "setConsentGiven does replay all queued requests" );// sent when enabling cookies as part of setConsentGiven. Called twice in total
+            strictEqual(4, (results.match(/consent=1/g) || []).length, "consent=1 parameter appears in URL when explicit consent given");
 
             var results2 = fetchTrackedRequests(getConsentToken() + '2');
             strictEqual(true, results2.indexOf('myFoo=bar&baz=3') > 0, "normal request" );
             strictEqual(0, (results2.match(/consent=1/g) || []).length, "consent=1 parameter not added when consent is assumed");
             start();
         }, 2000);
+    });
+
+    test("Test API - cookie consent", function() {
+        expect(16);
+
+        var queue;
+        var tracker = Piwik.getTracker();
+        tracker.setCustomData('token', getCookieConsentToken() + '1');
+        strictEqual(tracker.areCookiesEnabled(), true, "areCookiesEnabled, enabled by default" );
+        strictEqual(tracker.getRememberedCookieConsent(), 0, "getRememberedCookieConsent, not set by default" );
+
+        var success = tracker.requireCookieConsent();
+        ok(success, 'cookies were disabled after calling requireCookieConsent');
+        ok(!tracker.areCookiesEnabled(), 'disabling cookies disables cookies');
+
+        tracker.setCookieConsentGiven();
+        ok(tracker.areCookiesEnabled(), 'setCookieConsentGiven enables cookies');
+
+        tracker.rememberCookieConsentGiven();
+        var nowBefore = new Date().getTime() - 10000;
+        var nowAfter = new Date().getTime() + 10000;
+        var timeConsentGiven = tracker.getRememberedCookieConsent();
+        ok(timeConsentGiven && nowBefore < timeConsentGiven && nowAfter > timeConsentGiven, "getRememberedCookieConsent, returns time was given" );
+
+        success = tracker.requireCookieConsent();
+        ok(!success, 'cookies were not disabled because consent was remembered')
+        ok(tracker.areCookiesEnabled(), 'disableCookies wont disable cookies if cookie consent was remembered');
+
+        tracker.forgetCookieConsentGiven();
+        ok(!tracker.areCookiesEnabled(), 'forgetCookieConsentGiven will disable cookies');
+
+        tracker.setCookieConsentGiven();
+        ok(tracker.areCookiesEnabled(), 'cookies can be enabled again after forgetting cookies');
+
+        tracker.requireCookieConsent();
+        ok(!tracker.areCookiesEnabled(), 'requireCookieConsent works after forgetting cookies');
+
+        tracker.rememberCookieConsentGiven();
+        ok(tracker.areCookiesEnabled(), 'cookies are enabled before disabling it');
+
+        tracker.disableCookies();
+        ok(!tracker.areCookiesEnabled(), 'disable cookies always disables cookies');
+        tracker.forgetCookieConsentGiven();
     });
 
     test("Test API - optOut (via consent feature)", function () {
@@ -5045,6 +5124,59 @@ if ($mysql) {
         });
     });
 
+    test("Test optOut (via iframe)", function () {
+        expect(6);
+
+        var tracker = Piwik.addTracker();
+
+        strictEqual(tracker.hasConsent(), true, "hasConsent(), should be true by default" );
+
+        stop();
+        Q.delay(1).then(function () {
+            // Fire a message to set the opt in status to false
+            var optOutMessage = JSON.stringify({maq_opted_in: false});
+            tracker.hook.test._windowAlias.postMessage(optOutMessage, '*');
+            return Q.delay(500);
+       }).then(function () {
+            strictEqual(tracker.hasConsent(), false, "optout message listener should have set the cookie to false (async tracker)" );
+            // Fire another message to set it back to true
+            var optInMessage = JSON.stringify({maq_opted_in: true});
+            tracker.hook.test._windowAlias.postMessage(optInMessage, '*');
+            return Q.delay(500);
+        }).then(function () {
+            strictEqual(tracker.hasConsent(), true, "optout message listener should have set the cookie to true" );
+            start();
+        }).catch(function (e) {
+            console.log('caught', e.stack || e.message || e);
+        });
+    });
+
+    test("Test refreshConsentStatus()", function() {
+        expect(7);
+
+        var tracker = Piwik.addTracker();
+        var document = tracker.hook.test._windowAlias.document;
+
+        // Test 1: no cookies
+        tracker.hook.test._refreshConsentStatus();
+        strictEqual(tracker.hasConsent(), true, "hasConsent() true when no cookies present");
+
+        // Test 2: optout cookie
+        document.cookie = 'mtm_consent_removed=12345';
+        tracker.hook.test._refreshConsentStatus();
+        strictEqual(tracker.hasConsent(), false, "hasConsent() false when optout cookie present");
+
+        // Test 3: optin cookie
+        document.cookie = 'mtm_consent_removed=;expires=Sun, 01 Dec 2019 00:00:01 GMT';
+        document.cookie = 'mtm_consent=12345';
+        tracker.hook.test._refreshConsentStatus();
+        strictEqual(tracker.hasConsent(), true, "hasConsent() true when optin cookie present");
+
+        // Test 4: both cookies
+        document.cookie = 'mtm_consent_removed=12345';
+        tracker.hook.test._refreshConsentStatus();
+        strictEqual(tracker.hasConsent(), false, "hasConsent() false when optout cookie present");
+    });
 
     test("Internal timers and setLinkTrackingTimer()", function() {
         expect(8);
