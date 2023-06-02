@@ -1,3 +1,11 @@
+# ⚠ Repository is deprecated ⚠
+
+This is the old method to deploy a Matomo instance on Scalingo. This method is unmaintained and deprecated.
+
+To highlight the efforts of our community, we invite you to use the following project or one of its forks to deploy an up-to-date version of Matomo (4.12 or later):
+
+* https://github.com/betagouv/matomo-buildpack
+
 # Matomo (formerly Piwik) - matomo.org
 
 [![Latest Stable Version](https://poser.pugx.org/piwik/piwik/v/stable)](https://matomo.org/download/)
